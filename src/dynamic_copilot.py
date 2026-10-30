@@ -214,12 +214,13 @@ def main():
             else:
                 template_slug = f"{TEMPLATE_OWNER}/{TEMPLATE_REPO}"
                 try:
-                    gh("repo", "create", target_repo, "--template", template_slug, "--private", "--clone", checkout, env=cli_env)
+                    gh("repo", "create", target_repo, "--template", template_slug, "--private", env=cli_env)
+                    gh("repo", "clone", target_repo, checkout, env=cli_env)
                 except Exception as template_exc:
-                    # Si falla con template, intentamos crearlo vacío y clonarlo
                     print(f"Template creation failed ({template_exc}), attempting empty repo creation.")
                     try:
-                        gh("repo", "create", target_repo, "--private", "--clone", checkout, env=cli_env)
+                        gh("repo", "create", target_repo, "--private", env=cli_env)
+                        gh("repo", "clone", target_repo, checkout, env=cli_env)
                     except Exception as empty_exc:
                         if subprocess.run(["gh", "repo", "view", target_repo], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=cli_env).returncode == 0:
                             gh("repo", "clone", target_repo, checkout, env=cli_env)
