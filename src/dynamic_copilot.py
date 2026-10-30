@@ -278,11 +278,9 @@ def main():
             # Sincronización robusta con la rama remota existente de la plantilla
             fetch_res = subprocess.run(["git", "fetch", "origin", default_branch], capture_output=True, env=git_env, cwd=checkout)
             if fetch_res.returncode == 0:
-                # El remoto existe, hacemos checkout y pull limpio
                 subprocess.run(["git", "checkout", "-B", default_branch, f"origin/{default_branch}"], check=True, cwd=checkout)
                 subprocess.run(["git", "pull", "origin", default_branch, "--allow-unrelated-histories", "--no-edit"], check=False, env=git_env, cwd=checkout)
             else:
-                # El remoto está totalmente vacío, inicializamos localmente
                 readme_path = os.path.join(checkout, "README.md")
                 if not os.path.exists(readme_path):
                     with open(readme_path, "w", encoding="utf-8") as f:
@@ -335,46 +333,6 @@ def main():
             with open(os.path.join(checkout, "main.tf"), "w", encoding="utf-8") as tf:
                 tf.write("\n".join(tf_lines))
 
-            # Inyección obligatoria de .github/workflows/terraform-validate.yml
-            workflows_dir = os.path.join(checkout, ".github", "workflows")
-            os.makedirs(workflows_dir, exist_ok=True)
-            validate_workflow = """name: Terraform validation
-
-on:
-  pull_request:
-    paths:
-      - "**/*.tf"
-      - "**/*.tfvars"
-      - ".github/workflows/terraform-validate.yml"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout application infrastructure
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.8.5"
-
-      - name: Terraform format check
-        run: terraform fmt -check -recursive
-
-      - name: Terraform init (download remote modules/providers)
-        run: terraform init -backend=false -input=false
-
-      - name: Terraform validate
-        run: terraform validate -no-color
-"""
-            with open(os.path.join(workflows_dir, "terraform-validate.yml"), "w", encoding="utf-8") as wf:
-                wf.write(validate_workflow)
-
             # Generar README.md completo y detallado
             readme_content = [
                 f"# {repo_name}",
@@ -384,7 +342,6 @@ jobs:
                 "## 📂 Estructura del Repositorio",
                 "- `main.tf`: Configuración central de Terraform que instancia los módulos compartidos desde el catálogo remoto.",
                 "- `REQUEST.md`: Trazabilidad y parámetros exactos de la solicitud original realizada desde el Issue.",
-                "- `.github/workflows/terraform-validate.yml`: Flujo de integración continua para validar sintaxis y formato.",
                 "",
                 "## ☁️ Recursos y Módulos Desplegados",
             ]
@@ -415,7 +372,8 @@ jobs:
                     "Review code and checks before merge. No terraform apply is run by this workflow.\n"
                 )
 
-            subprocess.run(["git", "add", "main.tf", "README.md", "REQUEST.md", ".github/workflows/terraform-validate.yml"], check=True, cwd=checkout)
+            # Solo se añaden main.tf, README.md y REQUEST.md (evitando tocar workflows con el token PAT)
+            subprocess.run(["git", "add", "main.tf", "README.md", "REQUEST.md"], check=True, cwd=checkout)
             staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=checkout).returncode != 0
             if staged:
                 subprocess.run(["git", "commit", "-m", "feat: propose multi-resource infrastructure from issue #" + number], check=True, cwd=checkout)
