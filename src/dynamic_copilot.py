@@ -124,39 +124,6 @@ def hcl_value(value):
     raise ValueError("Tipo de parámetro Terraform no admitido.")
 
 
-def create_repo_from_template(repo_name):
-    if not GH_PLATFORM_TOKEN:
-        raise RuntimeError("GH_PLATFORM_TOKEN secret is not configured.")
-    url = "https://api.github.com/repos/" + TEMPLATE_OWNER + "/" + TEMPLATE_REPO + "/generate"
-    payload = {
-        "owner": OWNER,
-        "name": repo_name,
-        "description": "Infrastructure as Code for " + repo_name.removeprefix("infra-"),
-        "private": True,
-        "include_all_branches": False
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode(),
-        headers={
-            "Authorization": "Bearer " + GH_PLATFORM_TOKEN,
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "Content-Type": "application/json"
-        },
-        method="POST"
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            return json.loads(response.read().decode())
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode(errors="replace")[:1200]
-        if exc.code == 422 and "already exists" in detail.lower():
-            print("Verified existing repository " + OWNER + "/" + repo_name + "; reusing it.")
-            return {"full_name": OWNER + "/" + repo_name, "reused_existing": True}
-        raise RuntimeError("GitHub could not generate the repository from the template (HTTP " + str(exc.code) + "): " + detail) from exc
-
-
 def main():
     event_path = os.environ["GITHUB_EVENT_PATH"]
     with open(event_path, encoding="utf-8") as event_file:
@@ -172,7 +139,6 @@ def main():
     if event_name == "issue_comment" and issue.get("pull_request"):
         return
 
-    # Trazabilidad conversacional
     conversation = ""
     if event_name == "issue_comment":
         try:
@@ -216,13 +182,12 @@ def main():
                 "Entendí tu solicitud. Antes de generar Terraform y crear el repositorio, necesito estos datos obligatorios:\n\n" +
                 "\n".join("- " + error for error in errors) +
                 "\n\n**Puedes responder normalmente en español**; no necesitas usar comandos ni repetir los datos que ya proporcionaste. " +
-                "Когда estén completos los datos requeridos, continuaré con el repositorio y el Pull Request. No se despliegan recursos en AWS."
+                "Cuando estén completos los datos requeridos, continuaré con el repositorio y el Pull Request. No se despliegan recursos en AWS."
             )
             return
 
         repo_name = data["repository_name"]
         target_repo = OWNER + "/" + repo_name
-        create_repo_from_template(repo_name)
         
         cli_env = {"GH_TOKEN": GH_PLATFORM_TOKEN}
         auth_value = base64.b64encode(("x-access-token:" + GH_PLATFORM_TOKEN).encode()).decode()
@@ -237,9 +202,23 @@ def main():
 
         with tempfile.TemporaryDirectory(prefix="infra-copilot-") as temp_dir:
             checkout = os.path.join(temp_dir, repo_name)
-            gh("repo", "clone", target_repo, checkout, env=cli_env)
             
-            # Descubrimiento seguro de la rama principal (main/master)
+            # Verificar si el repositorio ya existe; si no, crearlo usando gh repo create --template
+            repo_exists = subprocess.run(
+                ["gh", "repo", "view", target_repo],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=cli_env
+            ).returncode == 0
+
+            if repo_exists:
+                print(f"Repository {target_repo} already exists; cloning it.")
+                gh("repo", "clone", target_repo, checkout, env=cli_env)
+            else:
+                template_slug = f"{TEMPLATE_OWNER}/{TEMPLATE_REPO}"
+                try:
+                    gh("repo", "create", target_repo, "--template", template_slug, "--private", "--clone", checkout, env=cli_env)
+                except Exception as template_exc:
+                    raise RuntimeError(f"Could not create repository from template {template_slug}: {template_exc}") from template_exc
+
             default_branch = ""
             try:
                 default_branch = gh(
@@ -324,7 +303,7 @@ def main():
             with open(os.path.join(checkout, "main.tf"), "w", encoding="utf-8") as tf:
                 tf.write("\n".join(tf_lines))
 
-            # REQUEST.md sencillo original del copilot
+            # REQUEST.md sencillo original
             with open(os.path.join(checkout, "REQUEST.md"), "w", encoding="utf-8") as doc:
                 doc.write(
                     "# Generated infrastructure request\n\n"
@@ -337,7 +316,6 @@ def main():
                     "Review code and checks before merge. No terraform apply is run by this workflow.\n"
                 )
 
-            # Solo se añaden main.tf y REQUEST.md
             subprocess.run(["git", "add", "main.tf", "REQUEST.md"], check=True, cwd=checkout)
             staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=checkout).returncode != 0
             if staged:
