@@ -147,6 +147,10 @@ def main():
             checkout = os.path.join(temp_dir, repo_name)
             gh("repo", "clone", target_repo, checkout, env=cli_env)
             
+            # Descubrir el catálogo de módulos remotos para obtener los sources remotos reales
+            from module_catalog import discover_modules
+            catalog = discover_modules()
+            
             default_branch = "main"
             branch = f"copilot/issue-{number}-dynamic"
             
@@ -157,7 +161,7 @@ def main():
             subprocess.run(["git", "config", "pull.rebase", "false"], check=False, cwd=checkout)
 
             try:
-                # Intentar sincronizar directamente con el remoto existente
+                # Sincronizar directamente con el remoto existente trayendo el historial inicial
                 subprocess.run(["git", "pull", "origin", default_branch, "--allow-unrelated-histories", "--no-edit"], check=True, env=git_env, cwd=checkout)
             except subprocess.CalledProcessError:
                 # Si el repositorio remoto está completamente vacío y falla el pull, inicializamos el README local
@@ -192,6 +196,11 @@ def main():
             for idx, res in enumerate(resources):
                 mod_path = res.get("module_path")
                 inst_name = res.get("instance_name", f"recurso_{idx}")
+                
+                # Obtener la fuente oficial del módulo remoto
+                module = next((m for m in catalog if m["path"] == mod_path), None)
+                module_source = module["source"] if module else f"git::https://github.com/cliffbill/terraform-aws-modules.git//{mod_path}?ref=main"
+                
                 params = res.get("parameters", {})
                 
                 if "tags" not in params:
@@ -202,7 +211,7 @@ def main():
 
                 tf_lines.extend([
                     f'module "{inst_name}" {{',
-                    f'  source = "../../modules/{mod_path}"' if not mod_path.startswith("git") else f'  source = "{mod_path}"',
+                    f'  source = {json.dumps(module_source)}',
                 ])
                 for key, value in params.items():
                     tf_lines.append(f'  {key} = {hcl_value(value)}')
@@ -215,6 +224,36 @@ def main():
             with open(os.path.join(checkout, "main.tf"), "w", encoding="utf-8") as tf:
                 tf.write("\n".join(tf_lines))
 
+            # Generar un README.md completo, estructurado y documentado automáticamente
+            readme_content = [
+                f"# {repo_name}",
+                "",
+                "> Infraestructura como Código (IaC) generada y gestionada automáticamente por **GenAI Infrastructure Platform**.",
+                "",
+                "## 📂 Estructura del Repositorio",
+                "- `main.tf`: Configuración central de Terraform que instancia los módulos compartidos desde el catálogo remoto.",
+                "- `REQUEST.md`: Trazabilidad y parámetros exactos de la solicitud original realizada desde el Issue.",
+                "",
+                "## ☁️ Recursos y Módulos Desplegados",
+            ]
+            
+            for res in resources:
+                readme_content.append(f"- **`{res.get('instance_name')}`**: Instancia basada en el módulo remoto `{res.get('module_path')}`.")
+            
+            readme_content.extend([
+                "",
+                "## 🔄 Flujo de Trabajo y Gobernanza",
+                "1. **Generación Automática**: Repositorio creado desde la plantilla oficial de la organización.",
+                "2. **Referencias Remotas**: Los módulos de Terraform no se copian localmente; se descargan de forma segura desde el catálogo compartido (`cliffbill/terraform-aws-modules`) durante el `terraform init`.",
+                "3. **Control de Cambios**: No se ejecuta ningún comando de despliegue automático (`terraform apply`). Toda modificación requiere revisión y aprobación humana mediante este Pull Request.",
+                "",
+                "---",
+                f"**Entorno objetivo:** `{data.get('environment')}` | **Región de AWS:** `{data.get('region')}`"
+            ])
+
+            with open(os.path.join(checkout, "README.md"), "w", encoding="utf-8") as r_file:
+                r_file.write("\n".join(readme_content))
+
             with open(os.path.join(checkout, "REQUEST.md"), "w", encoding="utf-8") as doc:
                 doc.write(
                     f"# Dynamic Infrastructure Request #{number}\n\n"
@@ -223,7 +262,7 @@ def main():
                     f"- Recursos solicitados: {len(resources)}\n"
                 )
 
-            subprocess.run(["git", "add", "main.tf", "REQUEST.md"], check=True, cwd=checkout)
+            subprocess.run(["git", "add", "main.tf", "README.md", "REQUEST.md"], check=True, cwd=checkout)
             if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=checkout).returncode != 0:
                 subprocess.run(["git", "commit", "-m", f"feat: dynamic multi-resource provisioning from issue #{number}"], check=True, cwd=checkout)
 
