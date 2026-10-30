@@ -400,9 +400,9 @@ def main():
             "\n\nThe selected shared Terraform modules are referenced remotely and downloaded during terraform init. No AWS resources were created."
         )
     except Exception as exc:
-    operation_error = str(exc)[:1500]
-    issue_comment(source_repo, number, "I couldn't complete the request: " + operation_error + "\nNo AWS resources were deployed.")
-    raise
+        operation_error = str(exc)[:1500]
+        issue_comment(source_repo, number, "I couldn't complete the request: " + operation_error + "\nNo AWS resources were deployed.")
+        raise
 
 
 if __name__ == "__main__":
