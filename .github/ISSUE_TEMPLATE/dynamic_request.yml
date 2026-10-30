@@ -1,0 +1,44 @@
+name: Solicitud de Infraestructura Dinámica
+description: Solicita múltiples recursos AWS en un solo repositorio de forma automatizada.
+title: "[Dinámico]: "
+labels: ["dynamic-infrastructure-request"]
+body:
+  - type: input
+    id: app_name
+    attributes:
+      label: Nombre del Repositorio de la Aplicación
+      description: Se creará automáticamente con el prefijo infra- (ej. pagos, logistica).
+      placeholder: logistica
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Entorno
+      options:
+        - dev
+        - test
+        - staging
+        - prod
+    validations:
+      required: true
+
+  - type: input
+    id: region
+    attributes:
+      label: Región de AWS
+      placeholder: us-east-1
+    validations:
+      required: true
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Descripción de los Recursos Deseados
+      description: Detalla los servicios (S3, VPC, DynamoDB, EC2, SQS), nombres y cantidades que requieres.
+      placeholder: |
+        - Recurso 1: S3 bucket llamado logistica-docs-dev
+        - Recurso 2: Tabla DynamoDB llamada logistica-transacciones-dev con clave id
+    validations:
+      required: true
