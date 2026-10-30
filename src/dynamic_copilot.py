@@ -153,17 +153,25 @@ def main():
             subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True, cwd=checkout)
             subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True, cwd=checkout)
             
-            try:
+           try:
                 subprocess.run(["git", "fetch", "origin", default_branch], check=True, env=git_env, cwd=checkout)
             except subprocess.CalledProcessError:
+                # Si el repositorio remoto está completamente vacío y no tiene ramas, inicializamos con README
                 readme_path = os.path.join(checkout, "README.md")
                 if not os.path.exists(readme_path):
                     with open(readme_path, "w", encoding="utf-8") as f:
                         f.write(f"# {repo_name}\n\nDynamic Infrastructure Hub\n")
                     subprocess.run(["git", "add", "README.md"], check=True, cwd=checkout)
                     subprocess.run(["git", "commit", "-m", "chore: initial commit"], check=True, cwd=checkout)
+                
+                # Intentamos hacer push, y si la rama main ya existe en el remoto, solo hacemos pull/rebase de forma limpia
+                try:
                     subprocess.run(["git", "push", "-u", "origin", default_branch], check=True, env=git_env, cwd=checkout)
-                    subprocess.run(["git", "fetch", "origin", default_branch], check=True, env=git_env, cwd=checkout)
+                except subprocess.CalledProcessError:
+                    subprocess.run(["git", "pull", "origin", default_branch, "--allow-unrelated-histories", "--no-edit"], check=False, env=git_env, cwd=checkout)
+                    subprocess.run(["git", "push", "-u", "origin", default_branch], check=True, env=git_env, cwd=checkout)
+                
+                subprocess.run(["git", "fetch", "origin", default_branch], check=True, env=git_env, cwd=checkout)
 
             base_ref = f"origin/{default_branch}"
             subprocess.run(["git", "checkout", "-B", branch, base_ref], check=True, cwd=checkout)
