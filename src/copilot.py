@@ -11,10 +11,10 @@ API_KEY = os.environ.get("LLM_API_KEY", "")
 GH_PLATFORM_TOKEN = os.environ.get("GH_PLATFORM_TOKEN", "")
 BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 MODEL = os.environ.get("LLM_MODEL", "gpt-5.4-nano")
-OWNER = os.environ.get("GITHUB_REPOSITORY", "aldo2510/genai-infrastructure-platform").split("/")[0]
-TEMPLATE_OWNER = "aldo2510"
+OWNER = os.environ.get("GITHUB_REPOSITORY", "cliffbill/genai-infrastructure-platform").split("/")[0]
+TEMPLATE_OWNER = "cliffbill"
 TEMPLATE_REPO = "terraform-infrastructure-template"
-MODULE_REPO = "aldo2510/terraform-aws-modules"
+MODULE_REPO = "cliffbill/terraform-aws-modules"
 
 
 def gh(*args, env=None):
