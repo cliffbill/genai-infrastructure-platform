@@ -153,9 +153,14 @@ def main():
             subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True, cwd=checkout)
             subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True, cwd=checkout)
             
+            # Configurar estrategia de pull por defecto para evitar bloqueos por ramas divergentes
+            subprocess.run(["git", "config", "pull.rebase", "false"], check=False, cwd=checkout)
+
             try:
-                subprocess.run(["git", "fetch", "origin", default_branch], check=True, env=git_env, cwd=checkout)
+                # Intentar sincronizar directamente con el remoto existente
+                subprocess.run(["git", "pull", "origin", default_branch, "--allow-unrelated-histories", "--no-edit"], check=True, env=git_env, cwd=checkout)
             except subprocess.CalledProcessError:
+                # Si el repositorio remoto está completamente vacío y falla el pull, inicializamos el README local
                 readme_path = os.path.join(checkout, "README.md")
                 if not os.path.exists(readme_path):
                     with open(readme_path, "w", encoding="utf-8") as f:
@@ -163,13 +168,8 @@ def main():
                     subprocess.run(["git", "add", "README.md"], check=True, cwd=checkout)
                     subprocess.run(["git", "commit", "-m", "chore: initial commit"], check=True, cwd=checkout)
                 
-                try:
-                    subprocess.run(["git", "push", "-u", "origin", default_branch], check=True, env=git_env, cwd=checkout)
-                except subprocess.CalledProcessError:
-                    subprocess.run(["git", "pull", "origin", default_branch, "--allow-unrelated-histories", "--no-edit"], check=False, env=git_env, cwd=checkout)
-                    subprocess.run(["git", "push", "-u", "origin", default_branch], check=True, env=git_env, cwd=checkout)
-                
-                subprocess.run(["git", "fetch", "origin", default_branch], check=True, env=git_env, cwd=checkout)
+                # Empujar el commit inicial si el repo estaba vacío
+                subprocess.run(["git", "push", "-u", "origin", default_branch], check=True, env=git_env, cwd=checkout)
 
             base_ref = f"origin/{default_branch}"
             subprocess.run(["git", "checkout", "-B", branch, base_ref], check=True, cwd=checkout)
