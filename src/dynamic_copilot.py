@@ -188,6 +188,13 @@ def main():
                 inst_name = res.get("instance_name", f"recurso_{idx}")
                 params = res.get("parameters", {})
                 
+                # Asegurar tags limpios sin duplicarse
+                if "tags" not in params:
+                    params["tags"] = {
+                        "Environment": data.get("environment", "dev"),
+                        "ManagedBy": "genai-infrastructure-platform"
+                    }
+
                 tf_lines.extend([
                     f'module "{inst_name}" {{',
                     f'  source = "../../modules/{mod_path}"' if not mod_path.startswith("git") else f'  source = "{mod_path}"',
@@ -196,10 +203,6 @@ def main():
                     tf_lines.append(f'  {key} = {hcl_value(value)}')
                 
                 tf_lines.extend([
-                    '  tags = {',
-                    f'    Environment = {json.dumps(data.get("environment", "dev"))}',
-                    '    ManagedBy   = "genai-infrastructure-platform"',
-                    '  }',
                     '}',
                     ''
                 ])
