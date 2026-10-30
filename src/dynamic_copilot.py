@@ -333,33 +333,7 @@ def main():
             with open(os.path.join(checkout, "main.tf"), "w", encoding="utf-8") as tf:
                 tf.write("\n".join(tf_lines))
 
-            # Generar README.md completo y detallado
-            readme_content = [
-                f"# {repo_name}",
-                "",
-                "> Infraestructura como Código (IaC) generada y gestionada automáticamente por **GenAI Infrastructure Platform**.",
-                "",
-                "## 📂 Estructura del Repositorio",
-                "- `main.tf`: Configuración central de Terraform que instancia los módulos compartidos desde el catálogo remoto.",
-                "- `REQUEST.md`: Trazabilidad y parámetros exactos de la solicitud original realizada desde el Issue.",
-                "",
-                "## ☁️ Recursos y Módulos Desplegados",
-            ]
-            for res in resources:
-                readme_content.append(f"- **`{res.get('instance_name')}`**: Instancia basada en el módulo remoto `{res.get('module_path')}`.")
-            readme_content.extend([
-                "",
-                "## 🔄 Flujo de Trabajo y Gobernanza",
-                "1. **Generación Automática**: Repositorio creado desde la plantilla oficial de la organización.",
-                "2. **Referencias Remotas**: Los módulos de Terraform se descargan de forma segura desde el catálogo compartido (`cliffbill/terraform-aws-modules`) durante `terraform init`.",
-                "3. **Control de Cambios**: No se ejecuta ningún comando de despliegue automático (`terraform apply`). Toda modificación requiere revisión y aprobación humana mediante este Pull Request.",
-                "",
-                "---",
-                f"**Entorno objetivo:** `{data.get('environment')}` | **Región de AWS:** `{data.get('region')}`"
-            ])
-            with open(os.path.join(checkout, "README.md"), "w", encoding="utf-8") as r_file:
-                r_file.write("\n".join(readme_content))
-
+            # REQUEST.md sencillo original del copilot
             with open(os.path.join(checkout, "REQUEST.md"), "w", encoding="utf-8") as doc:
                 doc.write(
                     "# Generated infrastructure request\n\n"
@@ -372,8 +346,8 @@ def main():
                     "Review code and checks before merge. No terraform apply is run by this workflow.\n"
                 )
 
-            # Solo se añaden main.tf, README.md y REQUEST.md (evitando tocar workflows con el token PAT)
-            subprocess.run(["git", "add", "main.tf", "README.md", "REQUEST.md"], check=True, cwd=checkout)
+            # Solo se añaden main.tf y REQUEST.md (sin tocar README ni workflows)
+            subprocess.run(["git", "add", "main.tf", "REQUEST.md"], check=True, cwd=checkout)
             staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=checkout).returncode != 0
             if staged:
                 subprocess.run(["git", "commit", "-m", "feat: propose multi-resource infrastructure from issue #" + number], check=True, cwd=checkout)
@@ -426,8 +400,9 @@ def main():
             "\n\nThe selected shared Terraform modules are referenced remotely and downloaded during terraform init. No AWS resources were created."
         )
     except Exception as exc:
-        issue_comment(source_repo, number, "I couldn't complete the request: " + str(exc)[:1500] + "\nNo AWS resources were deployed.")
-        raise
+    operation_error = str(exc)[:1500]
+    issue_comment(source_repo, number, "I couldn't complete the request: " + operation_error + "\nNo AWS resources were deployed.")
+    raise
 
 
 if __name__ == "__main__":
